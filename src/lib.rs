@@ -94,10 +94,10 @@ where
             sha256 = sha256
         )
     }
-    pub fn sign(&'a self) -> String {
+    pub fn sign(&'a self, service: &'a str) -> String {
         let canonical = self.canonical_request();
-        let string_to_sign = string_to_sign(self.datetime, self.region, &canonical);
-        let signing_key = signing_key(self.datetime, self.secret_key, self.region, "s3");
+        let string_to_sign = string_to_sign(self.datetime, self.region, &canonical, service);
+        let signing_key = signing_key(self.datetime, self.secret_key, self.region, service);
         let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &signing_key.unwrap());
         let tag = ring::hmac::sign(&key, string_to_sign.as_bytes());
         let signature = hex::encode(tag.as_ref());
@@ -107,7 +107,7 @@ where
             "AWS4-HMAC-SHA256 Credential={access_key}/{scope},\
              SignedHeaders={signed_headers},Signature={signature}",
             access_key = self.access_key,
-            scope = scope_string(self.datetime, self.region),
+            scope = scope_string(self.datetime, self.region, service),
             signed_headers = signed_headers,
             signature = signature
         )
@@ -144,20 +144,26 @@ pub fn canonical_query_string(uri: &Url) -> String {
     keyvalues.join("&")
 }
 
-pub fn scope_string(datetime: &DateTime<Utc>, region: &str) -> String {
+pub fn scope_string(datetime: &DateTime<Utc>, region: &str, service: &str) -> String {
     format!(
-        "{date}/{region}/s3/aws4_request",
+        "{date}/{region}/{service}/aws4_request",
         date = datetime.format(SHORT_DATE),
-        region = region
+        region = region,
+        service = service
     )
 }
 
-pub fn string_to_sign(datetime: &DateTime<Utc>, region: &str, canonical_req: &str) -> String {
+pub fn string_to_sign(
+    datetime: &DateTime<Utc>,
+    region: &str,
+    canonical_req: &str,
+    service: &str,
+) -> String {
     let hash = ring::digest::digest(&ring::digest::SHA256, canonical_req.as_bytes());
     format!(
         "AWS4-HMAC-SHA256\n{timestamp}\n{scope}\n{hash}",
         timestamp = datetime.format(LONG_DATETIME),
-        scope = scope_string(datetime, region),
+        scope = scope_string(datetime, region, service),
         hash = hex::encode(hash.as_ref())
     )
 }
